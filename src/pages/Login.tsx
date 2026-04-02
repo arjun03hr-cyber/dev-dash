@@ -23,13 +23,24 @@ const Login = () => {
 
     setLoading(true);
     try {
+      const timeoutSecs = 10;
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error(`Timeout: Server took longer than ${timeoutSecs}s to respond. Check Vercel Environment Variables.`)), timeoutSecs * 1000)
+      );
+
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
+        const result: any = await Promise.race([
+          supabase.auth.signUp({ email, password }),
+          timeoutPromise
+        ]);
+        if (result.error) throw result.error;
         toast.success("Account created! Check your email to confirm, or sign in if email confirmation is disabled.");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        const result: any = await Promise.race([
+          supabase.auth.signInWithPassword({ email, password }),
+          timeoutPromise
+        ]);
+        if (result.error) throw result.error;
         toast.success("Welcome back!");
       }
       navigate("/");
