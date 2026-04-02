@@ -31,6 +31,8 @@ export function useTeamData() {
   const [history, setHistory] = useState<ScoreHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  const [syncing, setSyncing] = useState(false);
+
   // Fetch teams from Supabase
   const fetchTeams = useCallback(async () => {
     const { data, error } = await supabase
@@ -40,13 +42,7 @@ export function useTeamData() {
 
     if (error) {
       console.error("Error fetching teams:", error);
-      // Fallback to hardcoded list if teams table doesn't exist yet
-      setTeams([
-        "AI allies", "Dev Dominators", "RR RANGERS", "PROMPT ENGINEER'S", "Team YS",
-        "SCRIPT STROM", "Future Builders", "Ctrl Alt Elite", "Byte-Sized Brains",
-        "CODE WARRIORS!!", "TEAM PROTON", "Hercules", "The Debuggers", "WEB WARRIORS",
-        "Copx", "PARALLAX", "Team Kanha", "ERROR 404", "Bug Hunters", "Zig and Zag",
-      ]);
+      toast.error("Failed to fetch teams from server.");
     } else if (data) {
       setTeams(data.map((t) => t.name));
     }
@@ -89,6 +85,7 @@ export function useTeamData() {
         (payload) => {
           if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
             const row = payload.new as { team_name: string; scores: TeamScores; notes: string };
+            // Avoid over-writing local state if we are currently syncing
             setAllData((prev) => ({
               ...prev,
               [row.team_name]: {
@@ -132,6 +129,7 @@ export function useTeamData() {
 
   // Upsert a team's evaluation to Supabase
   const upsertTeam = useCallback(async (teamName: string, teamData: TeamData) => {
+    setSyncing(true);
     const { error } = await supabase
       .from("evaluations")
       .upsert(
@@ -144,12 +142,13 @@ export function useTeamData() {
         { onConflict: "team_name" }
       );
 
+    setSyncing(false);
     if (error) {
       console.error("Error saving evaluation:", error);
       if (error.code === "42501" || error.message?.includes("policy")) {
         toast.error("Permission denied — only admins can edit scores");
       } else {
-        toast.error("Failed to save");
+        toast.error("Cloud Sync Failed - Check Connection");
       }
       return false;
     }
@@ -177,55 +176,72 @@ export function useTeamData() {
   }, []);
 
   const setScore = useCallback(
-    (criterion: string, value: number, changedBy?: string) => {
+    async (criterion: string, value: number, changedBy?: string) => {
       if (!selectedTeam) return;
-      setAllData((prev) => {
-        const teamData = prev[selectedTeam] || { scores: {}, notes: "" };
-        const oldValue = teamData.scores[criterion] ?? null;
-        const updated: TeamData = {
-          ...teamData,
-          scores: { ...teamData.scores, [criterion]: value },
-        };
-        upsertTeam(selectedTeam, updated);
-        if (changedBy) {
-          logScoreChange(selectedTeam, criterion, oldValue, value, changedBy);
-        }
-        return { ...prev, [selectedTeam]: updated };
-      });
+      
+      const teamData = allData[selectedTeam] || { scores: {}, notes: "" };
+      const oldValue = teamData.scores[criterion] ?? null;
+      
+      // Optimistic Update
+      const updated: TeamData = {
+        ...teamData,
+        scores: { ...teamData.scores, [criterion]: value },
+      };
+      
+      setAllData((prev) => ({ ...prev, [selectedTeam]: updated }));
+      
+      const success = await upsertTeam(selectedTeam, updated);
+      
+      if (success && changedBy) {
+        logScoreChange(selectedTeam, criterion, oldValue, value, changedBy);
+      } else if (!success) {
+        // Rollback on failure
+        setAllData((prev) => ({ ...prev, [selectedTeam]: teamData }));
+      }
     },
-    [selectedTeam, upsertTeam, logScoreChange]
+    [selectedTeam, allData, upsertTeam, logScoreChange]
   );
 
   const clearScore = useCallback(
-    (criterion: string, changedBy?: string) => {
+    async (criterion: string, changedBy?: string) => {
       if (!selectedTeam) return;
-      setAllData((prev) => {
-        const teamData = prev[selectedTeam] || { scores: {}, notes: "" };
-        const oldValue = teamData.scores[criterion] ?? null;
-        const newScores = { ...teamData.scores };
-        delete newScores[criterion];
-        const updated: TeamData = { ...teamData, scores: newScores };
-        upsertTeam(selectedTeam, updated);
-        if (changedBy) {
-          logScoreChange(selectedTeam, criterion, oldValue, null, changedBy);
-        }
-        return { ...prev, [selectedTeam]: updated };
-      });
+      
+      const teamData = allData[selectedTeam] || { scores: {}, notes: "" };
+      const oldValue = teamData.scores[criterion] ?? null;
+      const newScores = { ...teamData.scores };
+      delete newScores[criterion];
+      
+      // Optimistic Update
+      const updated: TeamData = { ...teamData, scores: newScores };
+      setAllData((prev) => ({ ...prev, [selectedTeam]: updated }));
+      
+      const success = await upsertTeam(selectedTeam, updated);
+      
+      if (success && changedBy) {
+        logScoreChange(selectedTeam, criterion, oldValue, null, changedBy);
+      } else if (!success) {
+        // Rollback on failure
+        setAllData((prev) => ({ ...prev, [selectedTeam]: teamData }));
+      }
     },
-    [selectedTeam, upsertTeam, logScoreChange]
+    [selectedTeam, allData, upsertTeam, logScoreChange]
   );
 
   const setNotes = useCallback(
-    (notes: string) => {
+    async (notes: string) => {
       if (!selectedTeam) return;
-      setAllData((prev) => {
-        const teamData = prev[selectedTeam] || { scores: {}, notes: "" };
-        const updated: TeamData = { ...teamData, notes };
-        upsertTeam(selectedTeam, updated);
-        return { ...prev, [selectedTeam]: updated };
-      });
+      const teamData = allData[selectedTeam] || { scores: {}, notes: "" };
+      const updated: TeamData = { ...teamData, notes };
+      
+      // Optimistic update
+      setAllData((prev) => ({ ...prev, [selectedTeam]: updated }));
+      const success = await upsertTeam(selectedTeam, updated);
+      
+      if (!success) {
+        setAllData((prev) => ({ ...prev, [selectedTeam]: teamData }));
+      }
     },
-    [selectedTeam, upsertTeam]
+    [selectedTeam, allData, upsertTeam]
   );
 
   const getTotal = useCallback(
@@ -338,6 +354,7 @@ export function useTeamData() {
     getLeaderboard,
     allData,
     loading,
+    syncing,
     addTeam,
     deleteTeam,
     history,

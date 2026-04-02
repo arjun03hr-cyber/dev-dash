@@ -9,7 +9,7 @@ import AddTeamDialog from "@/components/AddTeamDialog";
 import ScoreHistoryModal from "@/components/ScoreHistoryModal";
 import { useTeamData } from "@/hooks/useTeamData";
 import { useAuth } from "@/components/AuthProvider";
-import { Trophy, Lightbulb, Play, Palette, Puzzle, Globe, Presentation, Sparkles, LogOut, LogIn, Shield, Eye, History } from "lucide-react";
+import { Trophy, Lightbulb, Play, Palette, Puzzle, Globe, Presentation, Sparkles, LogOut, LogIn, Shield, Eye, History, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const criteriaData = [
@@ -26,7 +26,7 @@ const Index = () => {
   const {
     teams, selectedTeam, setSelectedTeam,
     currentData, setScore, clearScore, setNotes,
-    getLeaderboard, loading,
+    getLeaderboard, loading, syncing,
     addTeam, deleteTeam,
     history, historyLoading, fetchHistory, clearHistory,
   } = useTeamData();
@@ -79,33 +79,69 @@ const Index = () => {
             )}
           </div>
 
-          {isLoggedIn ? (
-            <Button
-              onClick={signOut}
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground hover:text-destructive"
-            >
-              <LogOut className="h-3.5 w-3.5 mr-1.5" />
-              Sign Out
-            </Button>
-          ) : (
-            <Button
-              onClick={() => navigate("/login")}
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground hover:text-neon-blue"
-            >
-              <LogIn className="h-3.5 w-3.5 mr-1.5" />
-              Admin Login
-            </Button>
-          )}
+          <div className="flex items-center gap-4">
+            {syncing && (
+              <div className="flex items-center gap-2 text-[10px] font-medium text-neon-blue animate-pulse">
+                <div className="h-1.5 w-1.5 rounded-full bg-neon-blue" />
+                Syncing...
+              </div>
+            )}
+            {isLoggedIn ? (
+              <Button
+                onClick={signOut}
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-destructive"
+              >
+                <LogOut className="h-3.5 w-3.5 mr-1.5" />
+                Sign Out
+              </Button>
+            ) : (
+              <Button
+                onClick={() => navigate("/login")}
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-neon-blue"
+              >
+                <LogIn className="h-3.5 w-3.5 mr-1.5" />
+                Admin Login
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Top bar: team selector + actions */}
         <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-          <div className="flex-1">
-            <TeamSelector teams={teams} selected={selectedTeam} onSelect={setSelectedTeam} />
+          <div className="flex-1 flex gap-2">
+            <div className="flex-1">
+              <TeamSelector teams={teams} selected={selectedTeam} onSelect={setSelectedTeam} />
+            </div>
+            <div className="flex gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 border-border/50 bg-muted/30 hover:bg-muted/50"
+                onClick={() => {
+                  const idx = teams.indexOf(selectedTeam);
+                  if (idx > 0) setSelectedTeam(teams[idx - 1]);
+                }}
+                disabled={teams.indexOf(selectedTeam) <= 0}
+              >
+                <ArrowRight className="h-4 w-4 rotate-180" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 border-border/50 bg-muted/30 hover:bg-muted/50"
+                onClick={() => {
+                  const idx = teams.indexOf(selectedTeam);
+                  if (idx < teams.length - 1) setSelectedTeam(teams[idx + 1]);
+                }}
+                disabled={teams.indexOf(selectedTeam) >= teams.length - 1}
+              >
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <div className="flex gap-2 flex-wrap">
             {isAdmin && (
@@ -138,7 +174,7 @@ const Index = () => {
         )}
 
         {/* Main grid */}
-        {!loading && !authLoading && (
+        {!authLoading && (
           <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
             {/* Left — Criteria */}
             <div className="space-y-5">
@@ -149,9 +185,15 @@ const Index = () => {
                 <p className="text-xs text-muted-foreground/60">7 criteria · 100 total marks</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                {criteriaData.map((c, i) => (
-                  <CriteriaCard key={c.title} {...c} index={i} />
-                ))}
+                {loading ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="h-24 glass rounded-xl animate-pulse bg-muted/20" />
+                  ))
+                ) : (
+                  criteriaData.map((c, i) => (
+                    <CriteriaCard key={c.title} {...c} index={i} />
+                  ))
+                )}
               </div>
               <JudgeGuidelines />
             </div>
@@ -161,14 +203,19 @@ const Index = () => {
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">
                 {isAdmin ? "Live Scoring" : "Score Viewer"}
               </h2>
-              <ScoringPanel
-                teamName={selectedTeam}
-                data={currentData}
-                onSetScore={handleSetScore}
-                onClearScore={handleClearScore}
-                onSetNotes={setNotes}
-                isAdmin={isAdmin}
-              />
+              {loading ? (
+                <div className="h-[400px] glass-strong rounded-2xl animate-pulse bg-muted/10" />
+              ) : (
+                <ScoringPanel
+                  teamName={selectedTeam}
+                  data={currentData}
+                  onSetScore={handleSetScore}
+                  onClearScore={handleClearScore}
+                  onSetNotes={setNotes}
+                  isAdmin={isAdmin}
+                  syncing={syncing}
+                />
+              )}
             </div>
           </div>
         )}

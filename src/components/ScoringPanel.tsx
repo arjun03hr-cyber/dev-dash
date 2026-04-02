@@ -42,9 +42,10 @@ interface ScoringPanelProps {
   onClearScore: (criterion: string) => void;
   onSetNotes: (notes: string) => void;
   isAdmin: boolean;
+  syncing?: boolean;
 }
 
-const ScoringPanel = ({ teamName, data, onSetScore, onClearScore, onSetNotes, isAdmin }: ScoringPanelProps) => {
+const ScoringPanel = ({ teamName, data, onSetScore, onClearScore, onSetNotes, isAdmin, syncing }: ScoringPanelProps) => {
   const total = Object.values(data.scores).reduce((a, b) => a + b, 0);
 
   const handleScore = (key: string, value: string, max: number) => {
@@ -122,14 +123,14 @@ const ScoringPanel = ({ teamName, data, onSetScore, onClearScore, onSetNotes, is
                   />
                 </div>
               </div>
-              <div className="flex items-center gap-1 bg-muted/30 border border-border/50 rounded-lg p-0.5 focus-within:border-neon-blue/50 focus-within:ring-1 focus-within:ring-neon-blue/20 transition-all">
+              <div className="flex items-center gap-1.5 bg-muted/40 border border-border/50 rounded-xl p-1 focus-within:border-neon-blue/50 focus-within:ring-2 focus-within:ring-neon-blue/20 transition-all shrink-0">
                 {isAdmin && (
                   <button
                     onClick={() => handleScore(c.key, String((val || 0) - 1), c.max)}
                     disabled={!val || val <= 0}
-                    className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/80 hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                    className="h-10 w-10 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/80 hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent transition-colors active:scale-95"
                   >
-                    <Minus className="h-3.5 w-3.5" />
+                    <Minus className="h-4 w-4" />
                   </button>
                 )}
                 <Input
@@ -140,17 +141,17 @@ const ScoringPanel = ({ teamName, data, onSetScore, onClearScore, onSetNotes, is
                   onChange={(e) => handleScore(c.key, e.target.value, c.max)}
                   placeholder={isAdmin ? "0" : "—"}
                   disabled={!isAdmin}
-                  className={`w-10 text-center text-sm font-semibold border-0 focus-visible:ring-0 p-0 h-7 bg-transparent no-spin-buttons ${
-                    !isAdmin ? "opacity-90 disabled:cursor-auto text-foreground font-bold" : ""
+                  className={`w-12 text-center text-base font-bold border-0 focus-visible:ring-0 p-0 h-10 bg-transparent no-spin-buttons ${
+                    !isAdmin ? "opacity-100 disabled:cursor-auto text-foreground font-black" : "text-neon-cyan"
                   }`}
                 />
                 {isAdmin && (
                   <button
                     onClick={() => handleScore(c.key, String((val || 0) + 1), c.max)}
                     disabled={val != null && val >= c.max}
-                    className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/80 hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                    className="h-10 w-10 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/80 hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent transition-colors active:scale-95"
                   >
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="h-4 w-4" />
                   </button>
                 )}
               </div>
